@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import prisma from '../../config/database';
 import { env } from '../../config/env';
-import { LoginDto, RefreshDto } from './auth.schema';
+import { RegisterDto, LoginDto, RefreshDto } from './auth.schema';
 
 const loginAttempts = new Map<string, { count: number; lockedUntil?: Date }>();
 
@@ -35,6 +35,46 @@ function signAccessToken(payload: object): string {
 function signRefreshToken(payload: object): string {
   return jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: env.JWT_REFRESH_EXPIRES_IN } as jwt.SignOptions);
 }
+
+export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { storeName, ownerName, email, phone, pin } = req.body as RegisterDto;
+
+    const existing = await prisma.user.findFirst({ where: { OR: [{ email }, { phone }] } });
+    if (existing) {
+      res.status(409).json({ message: 'Email or phone already registered' });
+      return;
+    }
+
+    const pinHash = await bcrypt.hash(pin, 10);
+
+    const { store, user } = await prisma.$transaction(async tx => {
+      const store = await tx.store.create({ data: { name: storeName } });
+      const branch = await tx.branch.create({ data: { name: 'Cabang Utama' } });
+      const user = await tx.user.create({
+        data: { name: ownerName, email, phone, role: 'owner', pinHash, branchId: branch.id },
+      });
+      return { store, user };
+    });
+
+    const tokenPayload = { userId: user.id, role: user.role, branchId: user.branchId };
+    const accessToken = signAccessToken(tokenPayload);
+    const refreshToken = signRefreshToken({ userId: user.id });
+
+    await prisma.refreshToken.create({
+      data: { token: refreshToken, userId: user.id, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+    });
+
+    res.status(201).json({
+      user: { id: user.id, name: user.name, role: user.role },
+      store: { id: store.id, name: store.name },
+      accessToken,
+      refreshToken,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
 
 export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
