@@ -4,10 +4,8 @@ import { UpdateStoreDto } from './store.schema';
 
 export const getStore = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    let store = await prisma.store.findFirst();
-    if (!store) {
-      store = await prisma.store.create({ data: { name: 'My Store' } });
-    }
+    const store = await prisma.store.findUnique({ where: { id: req.user!.storeId } });
+    if (!store) { res.status(404).json({ message: 'Store not found' }); return; }
     res.json(store);
   } catch (err) {
     next(err);
@@ -16,13 +14,11 @@ export const getStore = async (req: Request, res: Response, next: NextFunction):
 
 export const updateStore = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const data = req.body as UpdateStoreDto;
-    let store = await prisma.store.findFirst();
-    if (!store) {
-      store = await prisma.store.create({ data: { name: 'My Store' } });
-    }
-    const updated = await prisma.store.update({ where: { id: store.id }, data });
-    res.json(updated);
+    const store = await prisma.store.update({
+      where: { id: req.user!.storeId },
+      data: req.body as UpdateStoreDto,
+    });
+    res.json(store);
   } catch (err) {
     next(err);
   }

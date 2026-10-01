@@ -27,10 +27,19 @@ model Store {
   shiftBranchSelection       Boolean  @default(true)
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
+
+  users        User[]
+  branches     Branch[]
+  categories   Category[]
+  products     Product[]
+  shifts       Shift[]
+  transactions Transaction[]
+  pendingBills PendingBill[]
 }
 
 model User {
   id        String   @id @default(uuid())
+  storeId   String
   name      String
   email     String   @unique
   phone     String   @default("")
@@ -42,6 +51,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  store         Store          @relation(fields: [storeId], references: [id])
   branch        Branch?        @relation(fields: [branchId], references: [id])
   shifts        Shift[]
   transactions  Transaction[]
@@ -65,6 +75,7 @@ model RefreshToken {
 
 model Branch {
   id        String   @id @default(uuid())
+  storeId   String
   name      String
   address   String   @default("")
   phone     String   @default("")
@@ -72,6 +83,7 @@ model Branch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  store        Store         @relation(fields: [storeId], references: [id])
   users        User[]
   shifts       Shift[]
   transactions Transaction[]
@@ -79,6 +91,7 @@ model Branch {
 
 model Category {
   id        String   @id @default(uuid())
+  storeId   String
   name      String
   icon      String   @default("package")
   color     String   @default("#6366f1")
@@ -86,11 +99,13 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  store    Store     @relation(fields: [storeId], references: [id])
   products Product[]
 }
 
 model Product {
   id         String   @id @default(uuid())
+  storeId    String
   name       String
   sku        String   @unique
   barcode    String?  @unique
@@ -107,6 +122,7 @@ model Product {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  store            Store             @relation(fields: [storeId], references: [id])
   category         Category          @relation(fields: [categoryId], references: [id])
   variantGroups    VariantGroup[]
   transactionItems TransactionItem[]
@@ -136,6 +152,7 @@ model VariantOption {
 
 model Shift {
   id                String      @id @default(uuid())
+  storeId           String
   userId            String
   branchId          String
   type              ShiftType
@@ -150,6 +167,7 @@ model Shift {
   startedAt         DateTime    @default(now())
   closedAt          DateTime?
 
+  store        Store         @relation(fields: [storeId], references: [id])
   user         User          @relation(fields: [userId], references: [id])
   branch       Branch        @relation(fields: [branchId], references: [id])
   transactions Transaction[]
@@ -168,6 +186,7 @@ enum ShiftStatus {
 
 model Transaction {
   id                  String            @id @default(uuid())
+  storeId             String
   invoiceNumber       String            @unique
   shiftId             String
   userId              String
@@ -194,6 +213,7 @@ model Transaction {
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
+  store    Store             @relation(fields: [storeId], references: [id])
   shift    Shift             @relation(fields: [shiftId], references: [id])
   user     User              @relation(fields: [userId], references: [id])
   branch   Branch            @relation(fields: [branchId], references: [id])
@@ -243,6 +263,7 @@ enum PaymentMethod {
 
 model PendingBill {
   id            String   @id @default(uuid())
+  storeId       String
   label         String
   items         Json
   discountType  String?
@@ -254,4 +275,6 @@ model PendingBill {
   userId        String
   savedAt       DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id])
 }

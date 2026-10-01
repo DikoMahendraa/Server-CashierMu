@@ -8,11 +8,13 @@ function getQueryStr(req: Request, key: string): string | undefined {
 
 export const getSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const storeId = req.user!.storeId;
     const from = getQueryStr(req, 'from');
     const to = getQueryStr(req, 'to');
     const branchId = getQueryStr(req, 'branchId');
 
     const where = {
+      storeId,
       status: 'paid' as const,
       ...(branchId ? { branchId } : {}),
       ...(from || to ? { createdAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } } : {}),
@@ -34,6 +36,7 @@ export const getSummary = async (req: Request, res: Response, next: NextFunction
 
 export const getChart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const storeId = req.user!.storeId;
     const period = getQueryStr(req, 'period') || 'week';
     const off = parseInt(getQueryStr(req, 'offset') || '0', 10);
     const now = new Date();
@@ -64,7 +67,7 @@ export const getChart = async (req: Request, res: Response, next: NextFunction):
     }
 
     const transactions = await prisma.transaction.findMany({
-      where: { status: 'paid', createdAt: { gte: from, lt: to } },
+      where: { storeId, status: 'paid', createdAt: { gte: from, lt: to } },
       select: { grandTotal: true, createdAt: true },
     });
 
@@ -98,6 +101,7 @@ export const getChart = async (req: Request, res: Response, next: NextFunction):
 
 export const getTopProducts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const storeId = req.user!.storeId;
     const from = getQueryStr(req, 'from');
     const to = getQueryStr(req, 'to');
     const lim = parseInt(getQueryStr(req, 'limit') || '10', 10);
@@ -106,6 +110,7 @@ export const getTopProducts = async (req: Request, res: Response, next: NextFunc
       by: ['productId', 'productName', 'sku'],
       where: {
         transaction: {
+          storeId,
           status: 'paid',
           ...(from || to ? { createdAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } } : {}),
         },
@@ -129,6 +134,7 @@ export const getTopProducts = async (req: Request, res: Response, next: NextFunc
 
 export const getPaymentBreakdown = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const storeId = req.user!.storeId;
     const from = getQueryStr(req, 'from');
     const to = getQueryStr(req, 'to');
 
@@ -136,6 +142,7 @@ export const getPaymentBreakdown = async (req: Request, res: Response, next: Nex
       by: ['method'],
       where: {
         transaction: {
+          storeId,
           status: 'paid',
           ...(from || to ? { createdAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } } : {}),
         },
@@ -156,12 +163,14 @@ export const getPaymentBreakdown = async (req: Request, res: Response, next: Nex
 
 export const getShiftSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const storeId = req.user!.storeId;
     const from = getQueryStr(req, 'from');
     const to = getQueryStr(req, 'to');
     const branchId = getQueryStr(req, 'branchId');
 
     const shifts = await prisma.shift.findMany({
       where: {
+        storeId,
         ...(branchId ? { branchId } : {}),
         ...(from || to ? { startedAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } } : {}),
       },

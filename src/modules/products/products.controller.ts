@@ -10,6 +10,7 @@ function stockStatus(stock: number, minStock: number): string {
 
 export const listProducts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const storeId = req.user!.storeId;
     const categoryId = typeof req.query['categoryId'] === 'string' ? req.query['categoryId'] : undefined;
     const search = typeof req.query['search'] === 'string' ? req.query['search'] : undefined;
     const stockFilter = typeof req.query['stockStatus'] === 'string' ? req.query['stockStatus'] : undefined;
@@ -17,6 +18,7 @@ export const listProducts = async (req: Request, res: Response, next: NextFuncti
 
     const products = await prisma.product.findMany({
       where: {
+        storeId,
         ...(categoryId ? { categoryId } : {}),
         ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
         ...(isActiveParam !== undefined ? { isActive: isActiveParam === 'true' } : {}),
@@ -25,14 +27,8 @@ export const listProducts = async (req: Request, res: Response, next: NextFuncti
       orderBy: { name: 'asc' },
     });
 
-    const enriched = products.map(p => ({
-      ...p,
-      stockStatus: stockStatus(p.stock, p.minStock),
-    }));
-
-    const filtered = stockFilter
-      ? enriched.filter(p => p.stockStatus === stockFilter)
-      : enriched;
+    const enriched = products.map(p => ({ ...p, stockStatus: stockStatus(p.stock, p.minStock) }));
+    const filtered = stockFilter ? enriched.filter(p => p.stockStatus === stockFilter) : enriched;
 
     res.json(filtered);
   } catch (err) {
@@ -47,6 +43,7 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
     const product = await prisma.product.create({
       data: {
         ...productData,
+        storeId: req.user!.storeId,
         variantGroups: {
           create: variantGroups.map(vg => ({
             name: vg.name,
@@ -70,7 +67,7 @@ export const getProduct = async (req: Request, res: Response, next: NextFunction
   try {
     const id = String(req.params['id']);
     const product = await prisma.product.findUnique({
-      where: { id },
+      where: { id, storeId: req.user!.storeId },
       include: {
         variantGroups: { include: { options: { orderBy: { sortOrder: 'asc' } } }, orderBy: { sortOrder: 'asc' } },
         category: true,
@@ -87,7 +84,7 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
   try {
     const id = String(req.params['id']);
     const product = await prisma.product.update({
-      where: { id },
+      where: { id, storeId: req.user!.storeId },
       data: req.body as UpdateProductDto,
     });
     res.json(product);
@@ -100,7 +97,7 @@ export const adjustStock = async (req: Request, res: Response, next: NextFunctio
   try {
     const id = String(req.params['id']);
     const { adjustment } = req.body as AdjustStockDto;
-    const product = await prisma.product.findUnique({ where: { id } });
+    const product = await prisma.product.findUnique({ where: { id, storeId: req.user!.storeId } });
     if (!product) { res.status(404).json({ message: 'Product not found' }); return; }
 
     const newStock = product.stock + adjustment;
@@ -116,7 +113,7 @@ export const adjustStock = async (req: Request, res: Response, next: NextFunctio
 export const softDeleteProduct = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const id = String(req.params['id']);
-    await prisma.product.update({ where: { id }, data: { isActive: false } });
+    await prisma.product.update({ where: { id, storeId: req.user!.storeId }, data: { isActive: false } });
     res.status(204).send();
   } catch (err) {
     next(err);

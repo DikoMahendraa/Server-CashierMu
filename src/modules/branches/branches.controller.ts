@@ -2,10 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import prisma from '../../config/database';
 import { CreateBranchDto, UpdateBranchDto } from './branches.schema';
 
-export const listBranches = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const listBranches = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const branches = await prisma.branch.findMany({
-      where: { isActive: true },
+      where: { storeId: req.user!.storeId, isActive: true },
       orderBy: { createdAt: 'asc' },
     });
     res.json(branches);
@@ -16,7 +16,9 @@ export const listBranches = async (_req: Request, res: Response, next: NextFunct
 
 export const createBranch = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const branch = await prisma.branch.create({ data: req.body as CreateBranchDto });
+    const branch = await prisma.branch.create({
+      data: { ...(req.body as CreateBranchDto), storeId: req.user!.storeId },
+    });
     res.status(201).json(branch);
   } catch (err) {
     next(err);
@@ -27,7 +29,7 @@ export const updateBranch = async (req: Request, res: Response, next: NextFuncti
   try {
     const id = String(req.params['id']);
     const branch = await prisma.branch.update({
-      where: { id },
+      where: { id, storeId: req.user!.storeId },
       data: req.body as UpdateBranchDto,
     });
     res.json(branch);
@@ -39,7 +41,7 @@ export const updateBranch = async (req: Request, res: Response, next: NextFuncti
 export const toggleStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const id = String(req.params['id']);
-    const branch = await prisma.branch.findUnique({ where: { id } });
+    const branch = await prisma.branch.findUnique({ where: { id, storeId: req.user!.storeId } });
     if (!branch) { res.status(404).json({ message: 'Branch not found' }); return; }
     const updated = await prisma.branch.update({
       where: { id },

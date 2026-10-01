@@ -8,9 +8,10 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
   try {
     const body = req.body as CreateTransactionDto;
     const userId = req.user!.userId;
+    const storeId = req.user!.storeId;
 
     const productIds = body.items.map(i => i.productId);
-    const products = await prisma.product.findMany({ where: { id: { in: productIds }, isActive: true } });
+    const products = await prisma.product.findMany({ where: { id: { in: productIds }, storeId, isActive: true } });
     if (products.length !== productIds.length) {
       res.status(422).json({ message: 'One or more products not found or inactive' });
       return;
@@ -24,7 +25,7 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
       }
     }
 
-    const store = await prisma.store.findFirst();
+    const store = await prisma.store.findUnique({ where: { id: storeId } });
     const taxRate = store?.taxEnabled ? Number(store.taxRate) : 0;
     const serviceChargeRate = store?.serviceChargeEnabled ? Number(store.serviceChargeRate) : 0;
 
@@ -55,6 +56,7 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
 
       const newTx = await tx.transaction.create({
         data: {
+          storeId,
           invoiceNumber,
           shiftId: body.shiftId,
           userId,
@@ -123,6 +125,7 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
 
 export const listTransactions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const storeId = req.user!.storeId;
     const shiftId = typeof req.query['shiftId'] === 'string' ? req.query['shiftId'] : undefined;
     const branchId = typeof req.query['branchId'] === 'string' ? req.query['branchId'] : undefined;
     const status = typeof req.query['status'] === 'string' ? req.query['status'] as 'paid' | 'voided' | 'pending' : undefined;
@@ -132,6 +135,7 @@ export const listTransactions = async (req: Request, res: Response, next: NextFu
 
     const transactions = await prisma.transaction.findMany({
       where: {
+        storeId,
         ...(shiftId ? { shiftId } : {}),
         ...(branchId ? { branchId } : {}),
         ...(status ? { status } : {}),
@@ -156,7 +160,7 @@ export const getTransaction = async (req: Request, res: Response, next: NextFunc
   try {
     const id = String(req.params['id']);
     const transaction = await prisma.transaction.findUnique({
-      where: { id },
+      where: { id, storeId: req.user!.storeId },
       include: {
         user: { select: { id: true, name: true } },
         branch: { select: { id: true, name: true } },
@@ -175,15 +179,16 @@ export const voidTransaction = async (req: Request, res: Response, next: NextFun
   try {
     const id = String(req.params['id']);
     const { ownerPin, reason } = req.body as VoidTransactionDto;
+    const storeId = req.user!.storeId;
 
-    const owner = await prisma.user.findFirst({ where: { role: 'owner', isActive: true } });
+    const owner = await prisma.user.findFirst({ where: { role: 'owner', storeId, isActive: true } });
     if (!owner) { res.status(404).json({ message: 'Owner not found' }); return; }
 
     const pinMatch = await bcrypt.compare(ownerPin, owner.pinHash);
     if (!pinMatch) { res.status(401).json({ message: 'Invalid owner PIN' }); return; }
 
     const txRecord = await prisma.transaction.findUnique({
-      where: { id },
+      where: { id, storeId },
       include: { items: true, payments: true },
     });
     if (!txRecord) { res.status(404).json({ message: 'Transaction not found' }); return; }

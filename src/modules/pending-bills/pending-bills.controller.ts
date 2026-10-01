@@ -4,9 +4,10 @@ import { CreatePendingBillDto, UpdatePendingBillDto } from './pending-bills.sche
 
 export const listPendingBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const storeId = req.user!.storeId;
     const branchId = typeof req.query['branchId'] === 'string' ? req.query['branchId'] : undefined;
     const bills = await prisma.pendingBill.findMany({
-      where: branchId ? { branchId } : undefined,
+      where: { storeId, ...(branchId ? { branchId } : {}) },
       orderBy: { savedAt: 'desc' },
     });
     res.json(bills);
@@ -19,7 +20,7 @@ export const createPendingBill = async (req: Request, res: Response, next: NextF
   try {
     const data = req.body as CreatePendingBillDto;
     const bill = await prisma.pendingBill.create({
-      data: { ...data, userId: req.user!.userId },
+      data: { ...data, userId: req.user!.userId, storeId: req.user!.storeId },
     });
     res.status(201).json(bill);
   } catch (err) {
@@ -31,7 +32,7 @@ export const updatePendingBill = async (req: Request, res: Response, next: NextF
   try {
     const id = String(req.params['id']);
     const bill = await prisma.pendingBill.update({
-      where: { id },
+      where: { id, storeId: req.user!.storeId },
       data: req.body as UpdatePendingBillDto,
     });
     res.json(bill);
@@ -43,7 +44,7 @@ export const updatePendingBill = async (req: Request, res: Response, next: NextF
 export const deletePendingBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const id = String(req.params['id']);
-    await prisma.pendingBill.delete({ where: { id } });
+    await prisma.pendingBill.delete({ where: { id, storeId: req.user!.storeId } });
     res.status(204).send();
   } catch (err) {
     next(err);

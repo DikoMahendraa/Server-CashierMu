@@ -6,6 +6,7 @@ export interface AuthPayload {
   userId: string;
   role: string;
   branchId: string | null;
+  storeId: string;
 }
 
 declare global {

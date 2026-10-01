@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import prisma from '../../config/database';
 import { env } from '../../config/env';
-import { RegisterDto, LoginDto, RefreshDto } from './auth.schema';
+import { RegisterDto, CheckCredentialDto, LoginDto, RefreshDto } from './auth.schema';
 
 const loginAttempts = new Map<string, { count: number; lockedUntil?: Date }>();
 
@@ -50,14 +50,14 @@ export const register = async (req: Request, res: Response, next: NextFunction):
 
     const { store, user } = await prisma.$transaction(async tx => {
       const store = await tx.store.create({ data: { name: storeName } });
-      const branch = await tx.branch.create({ data: { name: 'Cabang Utama' } });
+      const branch = await tx.branch.create({ data: { name: 'Cabang Utama', storeId: store.id } });
       const user = await tx.user.create({
-        data: { name: ownerName, email, phone, role: 'owner', pinHash, branchId: branch.id },
+        data: { name: ownerName, email, phone, role: 'owner', pinHash, branchId: branch.id, storeId: store.id },
       });
       return { store, user };
     });
 
-    const tokenPayload = { userId: user.id, role: user.role, branchId: user.branchId };
+    const tokenPayload = { userId: user.id, role: user.role, branchId: user.branchId, storeId: user.storeId };
     const accessToken = signAccessToken(tokenPayload);
     const refreshToken = signRefreshToken({ userId: user.id });
 
@@ -66,11 +66,34 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     });
 
     res.status(201).json({
-      user: { id: user.id, name: user.name, role: user.role },
+      user: { id: user.id, name: user.name, role: user.role, storeId: user.storeId },
       store: { id: store.id, name: store.name },
       accessToken,
       refreshToken,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const checkCredential = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { credential } = req.body as CheckCredentialDto;
+
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [{ email: credential }, { phone: credential }],
+        isActive: true,
+      },
+      select: { id: true, name: true, role: true, branchId: true, avatarUrl: true, storeId: true },
+    });
+
+    if (!user) {
+      res.status(404).json({ exists: false, message: 'Akun tidak ditemukan' });
+      return;
+    }
+
+    res.json({ exists: true, user });
   } catch (err) {
     next(err);
   }
@@ -108,7 +131,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
     clearAttempts(ip);
 
-    const tokenPayload = { userId: user.id, role: user.role, branchId: user.branchId };
+    const tokenPayload = { userId: user.id, role: user.role, branchId: user.branchId, storeId: user.storeId };
     const accessToken = signAccessToken(tokenPayload);
     const refreshToken = signRefreshToken({ userId: user.id });
 
@@ -121,7 +144,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     });
 
     res.json({
-      user: { id: user.id, name: user.name, role: user.role, branchId: user.branchId },
+      user: { id: user.id, name: user.name, role: user.role, branchId: user.branchId, storeId: user.storeId },
       accessToken,
       refreshToken,
     });
@@ -154,7 +177,7 @@ export const refresh = async (req: Request, res: Response, next: NextFunction): 
       return;
     }
 
-    const accessToken = signAccessToken({ userId: user.id, role: user.role, branchId: user.branchId });
+    const accessToken = signAccessToken({ userId: user.id, role: user.role, branchId: user.branchId, storeId: user.storeId });
     res.json({ accessToken });
   } catch (err) {
     next(err);
@@ -175,7 +198,7 @@ export const me = async (req: Request, res: Response, next: NextFunction): Promi
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      select: { id: true, name: true, email: true, phone: true, role: true, branchId: true, avatarUrl: true, isActive: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, branchId: true, storeId: true, avatarUrl: true, isActive: true },
     });
     if (!user) {
       res.status(404).json({ message: 'User not found' });

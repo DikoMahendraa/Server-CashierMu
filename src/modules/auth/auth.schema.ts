@@ -12,6 +12,10 @@ export const registerSchema = z.object({
   path: ['pinConfirm'],
 });
 
+export const checkCredentialSchema = z.object({
+  credential: z.string().min(1),
+});
+
 export const loginSchema = z.object({
   credential: z.string().min(1),
   pin: z.string().length(6).regex(/^\d{6}$/),
@@ -22,5 +26,6 @@ export const refreshSchema = z.object({
 });
 
 export type RegisterDto = z.infer<typeof registerSchema>;
+export type CheckCredentialDto = z.infer<typeof checkCredentialSchema>;
 export type LoginDto = z.infer<typeof loginSchema>;
 export type RefreshDto = z.infer<typeof refreshSchema>;

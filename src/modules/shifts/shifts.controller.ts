@@ -6,15 +6,16 @@ export const openShift = async (req: Request, res: Response, next: NextFunction)
   try {
     const { type, openingBalance, branchId } = req.body as OpenShiftDto;
     const userId = req.user!.userId;
+    const storeId = req.user!.storeId;
 
-    const existing = await prisma.shift.findFirst({ where: { userId, status: 'open' } });
+    const existing = await prisma.shift.findFirst({ where: { userId, storeId, status: 'open' } });
     if (existing) {
       res.status(400).json({ message: 'You already have an open shift' });
       return;
     }
 
     const shift = await prisma.shift.create({
-      data: { userId, branchId, type, openingBalance },
+      data: { userId, branchId, type, openingBalance, storeId },
     });
     res.status(201).json(shift);
   } catch (err) {
@@ -26,8 +27,9 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
   try {
     const { closingBalance, notes } = req.body as CloseShiftDto;
     const userId = req.user!.userId;
+    const storeId = req.user!.storeId;
 
-    const shift = await prisma.shift.findFirst({ where: { userId, status: 'open' } });
+    const shift = await prisma.shift.findFirst({ where: { userId, storeId, status: 'open' } });
     if (!shift) {
       res.status(404).json({ message: 'No open shift found' });
       return;
@@ -48,7 +50,7 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
 export const getCurrentShift = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const shift = await prisma.shift.findFirst({
-      where: { userId: req.user!.userId, status: 'open' },
+      where: { userId: req.user!.userId, storeId: req.user!.storeId, status: 'open' },
       include: { branch: true },
     });
     if (!shift) { res.status(404).json({ message: 'No open shift' }); return; }
@@ -60,6 +62,7 @@ export const getCurrentShift = async (req: Request, res: Response, next: NextFun
 
 export const listShifts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const storeId = req.user!.storeId;
     const branchId = typeof req.query['branchId'] === 'string' ? req.query['branchId'] : undefined;
     const userId = typeof req.query['userId'] === 'string' ? req.query['userId'] : undefined;
     const status = typeof req.query['status'] === 'string' ? req.query['status'] as 'open' | 'closed' : undefined;
@@ -68,6 +71,7 @@ export const listShifts = async (req: Request, res: Response, next: NextFunction
 
     const shifts = await prisma.shift.findMany({
       where: {
+        storeId,
         ...(branchId ? { branchId } : {}),
         ...(userId ? { userId } : {}),
         ...(status ? { status } : {}),
@@ -89,7 +93,7 @@ export const getShift = async (req: Request, res: Response, next: NextFunction):
   try {
     const id = String(req.params['id']);
     const shift = await prisma.shift.findUnique({
-      where: { id },
+      where: { id, storeId: req.user!.storeId },
       include: {
         user: { select: { id: true, name: true } },
         branch: { select: { id: true, name: true } },

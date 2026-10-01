@@ -7,7 +7,7 @@ export const listUsers = async (req: Request, res: Response, next: NextFunction)
   try {
     const role = typeof req.query['role'] === 'string' ? req.query['role'] as 'owner' | 'cashier' : undefined;
     const users = await prisma.user.findMany({
-      where: role ? { role } : undefined,
+      where: { storeId: req.user!.storeId, ...(role ? { role } : {}) },
       select: { id: true, name: true, email: true, phone: true, role: true, branchId: true, isActive: true, avatarUrl: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     });
@@ -22,7 +22,7 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
     const { pin, ...data } = req.body as CreateUserDto;
     const pinHash = await bcrypt.hash(pin, 10);
     const user = await prisma.user.create({
-      data: { ...data, pinHash },
+      data: { ...data, pinHash, storeId: req.user!.storeId },
       select: { id: true, name: true, email: true, phone: true, role: true, branchId: true, isActive: true },
     });
     res.status(201).json(user);
@@ -35,7 +35,7 @@ export const getUser = async (req: Request, res: Response, next: NextFunction): 
   try {
     const id = String(req.params['id']);
     const user = await prisma.user.findUnique({
-      where: { id },
+      where: { id, storeId: req.user!.storeId },
       select: { id: true, name: true, email: true, phone: true, role: true, branchId: true, isActive: true, avatarUrl: true, createdAt: true },
     });
     if (!user) { res.status(404).json({ message: 'User not found' }); return; }
@@ -49,7 +49,7 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
   try {
     const id = String(req.params['id']);
     const user = await prisma.user.update({
-      where: { id },
+      where: { id, storeId: req.user!.storeId },
       data: req.body as UpdateUserDto,
       select: { id: true, name: true, email: true, phone: true, role: true, branchId: true, isActive: true },
     });
@@ -69,7 +69,7 @@ export const changePin = async (req: Request, res: Response, next: NextFunction)
     const ownerPinMatch = await bcrypt.compare(ownerPin, owner.pinHash);
     if (!ownerPinMatch) { res.status(401).json({ message: 'Invalid owner PIN' }); return; }
 
-    const targetUser = await prisma.user.findUnique({ where: { id } });
+    const targetUser = await prisma.user.findUnique({ where: { id, storeId: req.user!.storeId } });
     if (!targetUser) { res.status(404).json({ message: 'User not found' }); return; }
     if (targetUser.role === 'owner' && targetUser.id !== owner.id) {
       res.status(403).json({ message: "Cannot change another owner's PIN" });
@@ -91,7 +91,7 @@ export const toggleStatus = async (req: Request, res: Response, next: NextFuncti
       res.status(400).json({ message: 'Cannot deactivate your own account' });
       return;
     }
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findUnique({ where: { id, storeId: req.user!.storeId } });
     if (!user) { res.status(404).json({ message: 'User not found' }); return; }
     const updated = await prisma.user.update({
       where: { id },

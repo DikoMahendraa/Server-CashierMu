@@ -18,7 +18,7 @@ export const createProductSchema = z.object({
   name: z.string().min(1),
   sku: z.string().min(1),
   barcode: z.string().optional(),
-  categoryId: z.string().uuid(),
+  categoryId: z.string().min(1),
   buyPrice: z.number().min(0),
   sellPrice: z.number().min(0),
   stock: z.number().int().default(0),
