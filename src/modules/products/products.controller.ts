@@ -86,8 +86,9 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
     const product = await prisma.product.update({
       where: { id, storeId: req.user!.storeId },
       data: req.body as UpdateProductDto,
+      include: { category: { select: { id: true, name: true } } },
     });
-    res.json(product);
+    res.json({ ...product, stockStatus: stockStatus(product.stock, product.minStock) });
   } catch (err) {
     next(err);
   }
@@ -96,15 +97,21 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
 export const adjustStock = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const id = String(req.params['id']);
+    const storeId = req.user!.storeId;
     const { adjustment } = req.body as AdjustStockDto;
-    const product = await prisma.product.findUnique({ where: { id, storeId: req.user!.storeId } });
+
+    const product = await prisma.product.findUnique({ where: { id, storeId } });
     if (!product) { res.status(404).json({ message: 'Product not found' }); return; }
 
     const newStock = product.stock + adjustment;
     if (newStock < 0) { res.status(422).json({ message: 'Insufficient stock' }); return; }
 
-    const updated = await prisma.product.update({ where: { id }, data: { stock: newStock } });
-    res.json(updated);
+    const updated = await prisma.product.update({
+      where: { id, storeId },
+      data: { stock: newStock },
+      include: { category: { select: { id: true, name: true } } },
+    });
+    res.json({ ...updated, stockStatus: stockStatus(updated.stock, updated.minStock) });
   } catch (err) {
     next(err);
   }

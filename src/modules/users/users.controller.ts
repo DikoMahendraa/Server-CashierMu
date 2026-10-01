@@ -63,13 +63,15 @@ export const changePin = async (req: Request, res: Response, next: NextFunction)
   try {
     const id = String(req.params['id']);
     const { newPin, ownerPin } = req.body as ChangePinDto;
+    const storeId = req.user!.storeId;
+
     const owner = await prisma.user.findUnique({ where: { id: req.user!.userId } });
     if (!owner) { res.status(404).json({ message: 'Owner not found' }); return; }
 
     const ownerPinMatch = await bcrypt.compare(ownerPin, owner.pinHash);
     if (!ownerPinMatch) { res.status(401).json({ message: 'Invalid owner PIN' }); return; }
 
-    const targetUser = await prisma.user.findUnique({ where: { id, storeId: req.user!.storeId } });
+    const targetUser = await prisma.user.findUnique({ where: { id, storeId } });
     if (!targetUser) { res.status(404).json({ message: 'User not found' }); return; }
     if (targetUser.role === 'owner' && targetUser.id !== owner.id) {
       res.status(403).json({ message: "Cannot change another owner's PIN" });
@@ -77,7 +79,7 @@ export const changePin = async (req: Request, res: Response, next: NextFunction)
     }
 
     const pinHash = await bcrypt.hash(newPin, 10);
-    await prisma.user.update({ where: { id }, data: { pinHash } });
+    await prisma.user.update({ where: { id, storeId }, data: { pinHash } });
     res.json({ message: 'PIN updated successfully' });
   } catch (err) {
     next(err);
@@ -87,14 +89,18 @@ export const changePin = async (req: Request, res: Response, next: NextFunction)
 export const toggleStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const id = String(req.params['id']);
+    const storeId = req.user!.storeId;
+
     if (id === req.user!.userId) {
       res.status(400).json({ message: 'Cannot deactivate your own account' });
       return;
     }
-    const user = await prisma.user.findUnique({ where: { id, storeId: req.user!.storeId } });
+
+    const user = await prisma.user.findUnique({ where: { id, storeId } });
     if (!user) { res.status(404).json({ message: 'User not found' }); return; }
+
     const updated = await prisma.user.update({
-      where: { id },
+      where: { id, storeId },
       data: { isActive: !user.isActive },
       select: { id: true, name: true, isActive: true },
     });

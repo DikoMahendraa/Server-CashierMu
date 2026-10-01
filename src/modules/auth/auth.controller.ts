@@ -7,6 +7,14 @@ import { RegisterDto, CheckCredentialDto, LoginDto, RefreshDto } from './auth.sc
 
 const loginAttempts = new Map<string, { count: number; lockedUntil?: Date }>();
 
+const DEFAULT_CATEGORIES = [
+  { name: 'Makanan', icon: 'utensils', color: '#f97316', sortOrder: 1 },
+  { name: 'Minuman', icon: 'coffee',   color: '#3b82f6', sortOrder: 2 },
+  { name: 'Snack',   icon: 'cookie',   color: '#eab308', sortOrder: 3 },
+  { name: 'Rokok',   icon: 'cigarette',color: '#6b7280', sortOrder: 4 },
+  { name: 'Lainnya', icon: 'package',  color: '#8b5cf6', sortOrder: 5 },
+];
+
 function checkLock(key: string): boolean {
   const attempt = loginAttempts.get(key);
   if (!attempt) return false;
@@ -53,6 +61,9 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       const branch = await tx.branch.create({ data: { name: 'Cabang Utama', storeId: store.id } });
       const user = await tx.user.create({
         data: { name: ownerName, email, phone, role: 'owner', pinHash, branchId: branch.id, storeId: store.id },
+      });
+      await tx.category.createMany({
+        data: DEFAULT_CATEGORIES.map(cat => ({ ...cat, storeId: store.id })),
       });
       return { store, user };
     });

@@ -2,15 +2,15 @@ import { z } from 'zod';
 
 const variantOptionSchema = z.object({
   label: z.string().min(1),
-  priceModifier: z.number().default(0),
-  sortOrder: z.number().int().default(0),
+  priceModifier: z.coerce.number().default(0),
+  sortOrder: z.coerce.number().int().default(0),
 });
 
 const variantGroupSchema = z.object({
   name: z.string().min(1),
   required: z.boolean().default(false),
   multiSelect: z.boolean().default(false),
-  sortOrder: z.number().int().default(0),
+  sortOrder: z.coerce.number().int().default(0),
   options: z.array(variantOptionSchema).default([]),
 });
 
@@ -19,10 +19,11 @@ export const createProductSchema = z.object({
   sku: z.string().min(1),
   barcode: z.string().optional(),
   categoryId: z.string().min(1),
-  buyPrice: z.number().min(0),
-  sellPrice: z.number().min(0),
-  stock: z.number().int().default(0),
-  minStock: z.number().int().default(5),
+  buyPrice: z.coerce.number().min(0),
+  sellPrice: z.coerce.number().min(0),
+  stock: z.coerce.number().int().default(0),
+  minStock: z.coerce.number().int().default(5),
+  imageUrl: z.string().optional(),
   isActive: z.boolean().default(true),
   isFeatured: z.boolean().default(false),
   taxable: z.boolean().default(true),
@@ -33,7 +34,7 @@ export const createProductSchema = z.object({
 export const updateProductSchema = createProductSchema.omit({ variantGroups: true }).partial();
 
 export const adjustStockSchema = z.object({
-  adjustment: z.number().int(),
+  adjustment: z.coerce.number().int(),
   reason: z.string().optional(),
 });
 

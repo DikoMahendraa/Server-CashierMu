@@ -2,12 +2,12 @@ import { z } from 'zod';
 
 export const openShiftSchema = z.object({
   type: z.enum(['pagi', 'siang', 'malam']),
-  openingBalance: z.number().min(0).default(0),
+  openingBalance: z.coerce.number().min(0).default(0),
   branchId: z.string().uuid(),
 });
 
 export const closeShiftSchema = z.object({
-  closingBalance: z.number().min(0),
+  closingBalance: z.coerce.number().min(0),
   notes: z.string().default(''),
 });
 

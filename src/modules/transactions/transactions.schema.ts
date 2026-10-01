@@ -5,27 +5,27 @@ const selectedVariantSchema = z.object({
   groupName: z.string(),
   optionId: z.string(),
   optionLabel: z.string(),
-  priceModifier: z.number(),
+  priceModifier: z.coerce.number(),
 });
 
 const transactionItemSchema = z.object({
   productId: z.string().uuid(),
-  quantity: z.number().int().positive(),
-  unitPrice: z.number().min(0),
+  quantity: z.coerce.number().int().positive(),
+  unitPrice: z.coerce.number().min(0),
   selectedVariants: z.array(selectedVariantSchema).default([]),
   note: z.string().default(''),
 });
 
 const discountSchema = z.object({
   type: z.enum(['percent', 'nominal']),
-  value: z.number().min(0),
+  value: z.coerce.number().min(0),
   label: z.string().default(''),
   code: z.string().nullable().optional(),
 });
 
 const paymentSchema = z.object({
   method: z.enum(['cash', 'qris', 'transfer', 'debit_card', 'credit_card']),
-  amount: z.number().min(0),
+  amount: z.coerce.number().min(0),
   reference: z.string().nullable().optional(),
 });
 
@@ -37,7 +37,7 @@ export const createTransactionSchema = z.object({
   items: z.array(transactionItemSchema).min(1),
   discount: discountSchema.optional(),
   payments: z.array(paymentSchema).min(1),
-  cashPaid: z.number().min(0).default(0),
+  cashPaid: z.coerce.number().min(0).default(0),
 });
 
 export const voidTransactionSchema = z.object({

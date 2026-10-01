@@ -41,10 +41,13 @@ export const updateBranch = async (req: Request, res: Response, next: NextFuncti
 export const toggleStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const id = String(req.params['id']);
-    const branch = await prisma.branch.findUnique({ where: { id, storeId: req.user!.storeId } });
+    const storeId = req.user!.storeId;
+
+    const branch = await prisma.branch.findUnique({ where: { id, storeId } });
     if (!branch) { res.status(404).json({ message: 'Branch not found' }); return; }
+
     const updated = await prisma.branch.update({
-      where: { id },
+      where: { id, storeId },
       data: { isActive: !branch.isActive },
     });
     res.json(updated);
