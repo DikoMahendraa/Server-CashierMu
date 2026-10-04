@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcrypt';
+import { Prisma } from '@prisma/client';
 import prisma from '../../config/database';
 import { generateInvoiceNumber } from '../../utils/invoice';
 import { CreateTransactionDto, VoidTransactionDto } from './transactions.schema';
@@ -63,81 +64,96 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
     const cashPaid = body.cashPaid || 0;
     const changeAmount = Math.max(0, cashPaid - grandTotal);
 
-    const invoiceNumber = await generateInvoiceNumber(body.branchId);
+    // Retry up to 3 times on invoice number collision (P2002 unique constraint)
+    let transaction: Awaited<ReturnType<typeof prisma.$transaction>> | undefined;
+    let lastError: unknown;
 
-    const transaction = await prisma.$transaction(async tx => {
-      for (const item of body.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const invoiceNumber = await generateInvoiceNumber(storeId);
+      try {
+        transaction = await prisma.$transaction(async tx => {
+          for (const item of body.items) {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { stock: { decrement: item.quantity } },
+            });
+          }
+
+          const newTx = await tx.transaction.create({
+            data: {
+              storeId,
+              invoiceNumber,
+              shiftId: body.shiftId ?? null,
+              userId,
+              branchId: body.branchId,
+              subtotal,
+              discountType: body.discount?.type,
+              discountValue: body.discount?.value,
+              discountLabel: body.discount?.label,
+              discountCode: body.discount?.code,
+              discountAmount,
+              taxRate,
+              taxAmount,
+              serviceChargeRate,
+              serviceChargeAmount,
+              grandTotal,
+              cashPaid,
+              changeAmount,
+              customerName: body.customerName,
+              note: body.note,
+              items: {
+                create: body.items.map(item => {
+                  const product = products.find(p => p.id === item.productId)!;
+                  return {
+                    productId: item.productId,
+                    productName: product.name,
+                    sku: product.sku,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    subtotal: item.unitPrice * item.quantity,
+                    note: item.note,
+                    selectedVariants: item.selectedVariants,
+                  };
+                }),
+              },
+              payments: {
+                create: body.payments.map(p => ({
+                  method: p.method,
+                  amount: p.amount,
+                  reference: p.reference,
+                })),
+              },
+            },
+            include: { items: true, payments: true },
+          });
+
+          if (body.shiftId) {
+            const cashPayment = body.payments.filter(p => p.method === 'cash').reduce((s, p) => s + p.amount, 0);
+            const digitalPayment = body.payments.filter(p => p.method !== 'cash').reduce((s, p) => s + p.amount, 0);
+            await tx.shift.update({
+              where: { id: body.shiftId },
+              data: {
+                cashSalesTotal: { increment: cashPayment },
+                digitalSalesTotal: { increment: digitalPayment },
+                transactionCount: { increment: 1 },
+              },
+            });
+          }
+
+          return newTx;
         });
+
+        break; // success — exit retry loop
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          lastError = err;
+          continue; // retry with a new invoice number
+        }
+        throw err; // non-collision error — re-throw immediately
       }
+    }
 
-      const newTx = await tx.transaction.create({
-        data: {
-          storeId,
-          invoiceNumber,
-          shiftId: body.shiftId ?? null,
-          userId,
-          branchId: body.branchId,
-          subtotal,
-          discountType: body.discount?.type,
-          discountValue: body.discount?.value,
-          discountLabel: body.discount?.label,
-          discountCode: body.discount?.code,
-          discountAmount,
-          taxRate,
-          taxAmount,
-          serviceChargeRate,
-          serviceChargeAmount,
-          grandTotal,
-          cashPaid,
-          changeAmount,
-          customerName: body.customerName,
-          note: body.note,
-          items: {
-            create: body.items.map(item => {
-              const product = products.find(p => p.id === item.productId)!;
-              return {
-                productId: item.productId,
-                productName: product.name,
-                sku: product.sku,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                subtotal: item.unitPrice * item.quantity,
-                note: item.note,
-                selectedVariants: item.selectedVariants,
-              };
-            }),
-          },
-          payments: {
-            create: body.payments.map(p => ({
-              method: p.method,
-              amount: p.amount,
-              reference: p.reference,
-            })),
-          },
-        },
-        include: { items: true, payments: true },
-      });
-
-      // Only update shift totals when transaction is linked to a shift
-      if (body.shiftId) {
-        const cashPayment = body.payments.filter(p => p.method === 'cash').reduce((s, p) => s + p.amount, 0);
-        const digitalPayment = body.payments.filter(p => p.method !== 'cash').reduce((s, p) => s + p.amount, 0);
-
-        await tx.shift.update({
-          where: { id: body.shiftId },
-          data: {
-            cashSalesTotal: { increment: cashPayment },
-            digitalSalesTotal: { increment: digitalPayment },
-            transactionCount: { increment: 1 },
-          },
-        });
-      }
-
-      return newTx;
-    });
+    if (!transaction) throw lastError;
 
     res.status(201).json(transaction);
   } catch (err) {
