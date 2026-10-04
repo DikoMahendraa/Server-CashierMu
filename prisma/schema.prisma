@@ -188,7 +188,7 @@ model Transaction {
   id                  String            @id @default(uuid())
   storeId             String
   invoiceNumber       String            @unique
-  shiftId             String
+  shiftId             String?
   userId              String
   branchId            String
   subtotal            Decimal           @db.Decimal(15, 2)
@@ -214,7 +214,7 @@ model Transaction {
   updatedAt           DateTime          @updatedAt
 
   store    Store             @relation(fields: [storeId], references: [id])
-  shift    Shift             @relation(fields: [shiftId], references: [id])
+  shift    Shift?            @relation(fields: [shiftId], references: [id])
   user     User              @relation(fields: [userId], references: [id])
   branch   Branch            @relation(fields: [branchId], references: [id])
   items    TransactionItem[]

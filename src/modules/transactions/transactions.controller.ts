@@ -10,6 +10,26 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
     const userId = req.user!.userId;
     const storeId = req.user!.storeId;
 
+    // Fetch store first — needed for shift validation + tax/service charge rates
+    const store = await prisma.store.findUnique({ where: { id: storeId } });
+    if (!store) {
+      res.status(404).json({ message: 'Store not found' });
+      return;
+    }
+
+    // Shift validation — only enforce when shiftEnabled = true
+    if (store.shiftEnabled) {
+      if (!body.shiftId) {
+        res.status(422).json({ message: 'Shift wajib dibuka terlebih dahulu sebelum transaksi' });
+        return;
+      }
+      const shift = await prisma.shift.findUnique({ where: { id: body.shiftId, storeId } });
+      if (!shift || shift.status !== 'open') {
+        res.status(422).json({ message: 'Shift tidak ditemukan atau sudah ditutup' });
+        return;
+      }
+    }
+
     const productIds = body.items.map(i => i.productId);
     const products = await prisma.product.findMany({ where: { id: { in: productIds }, storeId, isActive: true } });
     if (products.length !== productIds.length) {
@@ -25,9 +45,8 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
       }
     }
 
-    const store = await prisma.store.findUnique({ where: { id: storeId } });
-    const taxRate = store?.taxEnabled ? Number(store.taxRate) : 0;
-    const serviceChargeRate = store?.serviceChargeEnabled ? Number(store.serviceChargeRate) : 0;
+    const taxRate = store.taxEnabled ? Number(store.taxRate) : 0;
+    const serviceChargeRate = store.serviceChargeEnabled ? Number(store.serviceChargeRate) : 0;
 
     const subtotal = body.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
     let discountAmount = 0;
@@ -58,7 +77,7 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
         data: {
           storeId,
           invoiceNumber,
-          shiftId: body.shiftId,
+          shiftId: body.shiftId ?? null,
           userId,
           branchId: body.branchId,
           subtotal,
@@ -102,17 +121,20 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
         include: { items: true, payments: true },
       });
 
-      const cashPayment = body.payments.filter(p => p.method === 'cash').reduce((s, p) => s + p.amount, 0);
-      const digitalPayment = body.payments.filter(p => p.method !== 'cash').reduce((s, p) => s + p.amount, 0);
+      // Only update shift totals when transaction is linked to a shift
+      if (body.shiftId) {
+        const cashPayment = body.payments.filter(p => p.method === 'cash').reduce((s, p) => s + p.amount, 0);
+        const digitalPayment = body.payments.filter(p => p.method !== 'cash').reduce((s, p) => s + p.amount, 0);
 
-      await tx.shift.update({
-        where: { id: body.shiftId },
-        data: {
-          cashSalesTotal: { increment: cashPayment },
-          digitalSalesTotal: { increment: digitalPayment },
-          transactionCount: { increment: 1 },
-        },
-      });
+        await tx.shift.update({
+          where: { id: body.shiftId },
+          data: {
+            cashSalesTotal: { increment: cashPayment },
+            digitalSalesTotal: { increment: digitalPayment },
+            transactionCount: { increment: 1 },
+          },
+        });
+      }
 
       return newTx;
     });
@@ -210,17 +232,20 @@ export const voidTransaction = async (req: Request, res: Response, next: NextFun
         data: { status: 'voided', voidReason: reason, voidedAt: new Date(), voidedBy: ownerName },
       });
 
-      const cashTotal = payments.filter(p => p.method === 'cash').reduce((s, p) => s + Number(p.amount), 0);
-      const digitalTotal = payments.filter(p => p.method !== 'cash').reduce((s, p) => s + Number(p.amount), 0);
+      // Only reverse shift totals if transaction was linked to a shift
+      if (shiftId) {
+        const cashTotal = payments.filter(p => p.method === 'cash').reduce((s, p) => s + Number(p.amount), 0);
+        const digitalTotal = payments.filter(p => p.method !== 'cash').reduce((s, p) => s + Number(p.amount), 0);
 
-      await tx.shift.update({
-        where: { id: shiftId },
-        data: {
-          cashSalesTotal: { decrement: cashTotal },
-          digitalSalesTotal: { decrement: digitalTotal },
-          transactionCount: { decrement: 1 },
-        },
-      });
+        await tx.shift.update({
+          where: { id: shiftId },
+          data: {
+            cashSalesTotal: { decrement: cashTotal },
+            digitalSalesTotal: { decrement: digitalTotal },
+            transactionCount: { decrement: 1 },
+          },
+        });
+      }
     });
 
     res.json({ message: 'Transaction voided successfully' });

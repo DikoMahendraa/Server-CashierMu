@@ -5,6 +5,7 @@ export const updateStoreSchema = z.object({
   address: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email().optional(),
+  logoUrl: z.string().nullable().optional(),
   receiptHeader: z.string().optional(),
   receiptFooter: z.string().optional(),
   taxEnabled: z.boolean().optional(),

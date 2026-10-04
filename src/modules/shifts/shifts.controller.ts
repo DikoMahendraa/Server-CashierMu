@@ -53,8 +53,8 @@ export const getCurrentShift = async (req: Request, res: Response, next: NextFun
       where: { userId: req.user!.userId, storeId: req.user!.storeId, status: 'open' },
       include: { branch: true },
     });
-    if (!shift) { res.status(404).json({ message: 'No open shift' }); return; }
-    res.json(shift);
+    // Return null (not 404) when no active shift — absence of shift is a valid state
+    res.json(shift ?? null);
   } catch (err) {
     next(err);
   }

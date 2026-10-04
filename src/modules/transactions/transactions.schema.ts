@@ -30,7 +30,7 @@ const paymentSchema = z.object({
 });
 
 export const createTransactionSchema = z.object({
-  shiftId: z.string().uuid(),
+  shiftId: z.string().uuid().nullable().optional(),
   branchId: z.string().uuid(),
   customerName: z.string().default(''),
   note: z.string().default(''),

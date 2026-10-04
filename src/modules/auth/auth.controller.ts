@@ -154,8 +154,25 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       },
     });
 
+    const store = await prisma.store.findUnique({
+      where: { id: user.storeId },
+      select: { id: true, name: true, shiftEnabled: true, currency: true, currencySymbol: true },
+    });
+
+    // requireShift: kasir wajib punya shift aktif sebelum operasional
+    const requireShift = user.role !== 'owner' && (store?.shiftEnabled ?? false);
+
+    // activeShift selalu di-query untuk semua role — owner juga bisa punya shift aktif
+    const activeShift = await prisma.shift.findFirst({
+      where: { userId: user.id, storeId: user.storeId, status: 'open' },
+      select: { id: true, branchId: true, type: true, startedAt: true, openingBalance: true },
+    });
+
     res.json({
-      user: { id: user.id, name: user.name, role: user.role, branchId: user.branchId, storeId: user.storeId },
+      user: { id: user.id, name: user.name, role: user.role, branchId: user.branchId, avatarUrl: user.avatarUrl, storeId: user.storeId },
+      store,
+      requireShift,
+      activeShift,
       accessToken,
       refreshToken,
     });
@@ -215,7 +232,21 @@ export const me = async (req: Request, res: Response, next: NextFunction): Promi
       res.status(404).json({ message: 'User not found' });
       return;
     }
-    res.json(user);
+
+    const store = await prisma.store.findUnique({
+      where: { id: user.storeId },
+      select: { id: true, name: true, shiftEnabled: true, currency: true, currencySymbol: true },
+    });
+
+    const requireShift = user.role !== 'owner' && (store?.shiftEnabled ?? false);
+
+    // activeShift selalu di-query untuk semua role
+    const activeShift = await prisma.shift.findFirst({
+      where: { userId: user.id, storeId: user.storeId, status: 'open' },
+      select: { id: true, branchId: true, type: true, startedAt: true, openingBalance: true },
+    });
+
+    res.json({ user, store, requireShift, activeShift });
   } catch (err) {
     next(err);
   }
