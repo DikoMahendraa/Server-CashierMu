@@ -19,6 +19,7 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
     }
 
     // Shift validation — only enforce when shiftEnabled = true
+    let resolvedBranchId: string | null = body.branchId ?? req.user!.branchId;
     if (store.shiftEnabled) {
       if (!body.shiftId) {
         res.status(422).json({ message: 'Shift wajib dibuka terlebih dahulu sebelum transaksi' });
@@ -29,6 +30,12 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
         res.status(422).json({ message: 'Shift tidak ditemukan atau sudah ditutup' });
         return;
       }
+      resolvedBranchId = shift.branchId;
+    }
+
+    if (!resolvedBranchId) {
+      res.status(422).json({ message: 'Kasir tidak memiliki cabang yang ditentukan. Hubungi admin untuk mengatur cabang.' });
+      return;
     }
 
     const productIds = body.items.map(i => i.productId);
@@ -85,7 +92,7 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
               invoiceNumber,
               shiftId: body.shiftId ?? null,
               userId,
-              branchId: body.branchId,
+              branchId: resolvedBranchId,
               subtotal,
               discountType: body.discount?.type,
               discountValue: body.discount?.value,
@@ -124,7 +131,7 @@ export const createTransaction = async (req: Request, res: Response, next: NextF
                 })),
               },
             },
-            include: { items: true, payments: true },
+            include: { items: true, payments: true, user: { select: { id: true, name: true } } },
           });
 
           if (body.shiftId) {

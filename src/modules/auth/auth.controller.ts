@@ -156,7 +156,25 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
     const store = await prisma.store.findUnique({
       where: { id: user.storeId },
-      select: { id: true, name: true, shiftEnabled: true, currency: true, currencySymbol: true },
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        phone: true,
+        email: true,
+        logoUrl: true,
+        receiptHeader: true,
+        receiptFooter: true,
+        taxEnabled: true,
+        taxRate: true,
+        serviceChargeEnabled: true,
+        serviceChargeRate: true,
+        currency: true,
+        currencySymbol: true,
+        shiftEnabled: true,
+        shiftRequireOpeningBalance: true,
+        shiftBranchSelection: true,
+      },
     });
 
     // requireShift: kasir wajib punya shift aktif sebelum operasional
@@ -235,7 +253,25 @@ export const me = async (req: Request, res: Response, next: NextFunction): Promi
 
     const store = await prisma.store.findUnique({
       where: { id: user.storeId },
-      select: { id: true, name: true, shiftEnabled: true, currency: true, currencySymbol: true },
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        phone: true,
+        email: true,
+        logoUrl: true,
+        receiptHeader: true,
+        receiptFooter: true,
+        taxEnabled: true,
+        taxRate: true,
+        serviceChargeEnabled: true,
+        serviceChargeRate: true,
+        currency: true,
+        currencySymbol: true,
+        shiftEnabled: true,
+        shiftRequireOpeningBalance: true,
+        shiftBranchSelection: true,
+      },
     });
 
     const requireShift = user.role !== 'owner' && (store?.shiftEnabled ?? false);
