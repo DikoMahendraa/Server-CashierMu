@@ -57,7 +57,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     const pinHash = await bcrypt.hash(pin, 10);
 
     const { store, user } = await prisma.$transaction(async tx => {
-      const store = await tx.store.create({ data: { name: storeName } });
+      const store = await tx.store.create({ data: { name: storeName, phone, email } });
       const branch = await tx.branch.create({ data: { name: 'Cabang Utama', storeId: store.id } });
       const user = await tx.user.create({
         data: { name: ownerName, email, phone, role: 'owner', pinHash, branchId: branch.id, storeId: store.id },
@@ -187,7 +187,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     });
 
     res.json({
-      user: { id: user.id, name: user.name, role: user.role, branchId: user.branchId, avatarUrl: user.avatarUrl, storeId: user.storeId },
+      user: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, branchId: user.branchId, avatarUrl: user.avatarUrl, storeId: user.storeId },
       store,
       requireShift,
       activeShift,
@@ -235,6 +235,35 @@ export const logout = async (req: Request, res: Response, next: NextFunction): P
     const { refreshToken } = req.body as RefreshDto;
     await prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
     res.json({ message: 'Logged out successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateMe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const { name, email, phone } = req.body as { name?: string; email?: string; phone?: string };
+
+    if (email) {
+      const conflict = await prisma.user.findFirst({ where: { email, NOT: { id: userId } } });
+      if (conflict) {
+        res.status(409).json({ message: 'Email sudah digunakan oleh akun lain' });
+        return;
+      }
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(name  !== undefined ? { name }  : {}),
+        ...(email !== undefined ? { email } : {}),
+        ...(phone !== undefined ? { phone } : {}),
+      },
+      select: { id: true, name: true, email: true, phone: true, role: true },
+    });
+
+    res.json(user);
   } catch (err) {
     next(err);
   }
